@@ -75,6 +75,7 @@ def Create_manifest(input)
     bag = BagIt::Bag.new isvalidbag
     if bag.valid?
       TargetBags << isvalidbag
+      green("Confirmed bag: #{isvalidbag}")
     else
       red("Warning! Invalid Bag Detected at -- #{isvalidbag} -- Dumping List of Validated Bags and Exiting!")
         data = {"ConfirmedBags" => TargetBags}
