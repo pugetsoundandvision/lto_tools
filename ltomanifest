@@ -3,6 +3,7 @@
 require 'bagit'
 require 'yaml'
 require 'optparse'
+require 'pathname'
 
 option = {}
 
@@ -15,10 +16,13 @@ OptionParser.new do |opts|
   opts.on("-c", "--confirm", "Confirm manifest") do |d|
     option = 'confirm'
   end
+  opts.on("-b", "--bagdump=val", "Bag dump", String) { |val| $bagdump = val }
+
   opts.on("-h", "--help", "Help") do
     puts opts
     exit
   end
+
   if ARGV.empty?
     puts opts
   end
@@ -34,6 +38,13 @@ end
 
 def green(input)
   puts "\e[36m#{input}\e[0m"
+end
+
+# Parse Bag Dump if selected
+if ! $bagdump.nil?
+  bagdumppath = Pathname.new($bagdump)
+  bagdumpcontents = YAML::load_file(bagdumppath)
+  @confirmed_dumpbags =  bagdumpcontents['ConfirmedBags']
 end
 
 def Create_manifest(input)
@@ -52,9 +63,21 @@ def Create_manifest(input)
     red("#{input}/tapemanifest.txt already exists. Exiting.")
     exit
   end
-  #Get list of directories
+  #Get list of directories (skip dump list bags if present)
   Dir.chdir(input)
-  bag_list = Dir.glob('*')
+  if ! @confirmed_dumpbags.nil?
+    green("Will skip previously confirmed bags listed in BagListDump.txt")
+    bag_list = Dir.glob('*') - @confirmed_dumpbags
+    @confirmed_dumpbags.each do |isvalidbag|
+      TargetBags << isvalidbag
+    end
+  else
+    bag_list = Dir.glob('*')
+  end
+  if bag_list.include? 'BagListDump.txt'
+    red("BagListDump.txt detected in target directory. Please move this outside of target and try again! Exiting.")
+  end
+
   #Check if supposed bags are actually directories
   bag_list.each do |isdirectory|
     if ! File.directory?(isdirectory)
@@ -67,12 +90,19 @@ def Create_manifest(input)
   bag_list.each do |isbag|
     if ! File.exist?("#{isbag}/bag-info.txt") || ! File.exist?("#{isbag}/bagit.txt")
       red("Warning! Unbagged directory found at -- #{isbag} Exiting.")
+      exit
     end
   end
 
   #Verify all bags are valid bags
   bag_list.each do |isvalidbag|
     bag = BagIt::Bag.new isvalidbag
+    # Check files by name first
+    if ! bag.valid_oxum?
+      red("Warning! Manifest contents do not match actual bag contents in -- #{isvalidbag} Exiting.")
+      exit
+    end
+    #Check files by checksums
     if bag.valid?
       TargetBags << isvalidbag
       green("Confirmed bag: #{isvalidbag}")
@@ -89,12 +119,13 @@ def Create_manifest(input)
   targetBagsSorted.each do |bagparse|
     metafile = "#{bagparse}/manifest-md5.txt"
     contents = File.readlines(metafile)
-    bagcontents << bagparse
-    bagcontents << contents
+    parsedcontents = {"Bag Name" => bagparse, "Bag Contents" => contents}
+    bagcontents << parsedcontents
   end
 
   #Write manifest of bags and checksums
   data = {"Bag List" => targetBagsSorted, "Contents" => bagcontents}
+
   File.write('tapemanifest.txt',data.to_yaml)
   green("Manifest written at #{input}/tapemanifest.txt")
 end
@@ -102,7 +133,7 @@ end
 def Auditmanifest(input)
   #Confirm input
   if input.length > 1
-    red("Please only use one maifest file as input. Exiting.")
+    red("Please only use one manifest file as input. Exiting.")
     exit  
   else
     input = input[0]
