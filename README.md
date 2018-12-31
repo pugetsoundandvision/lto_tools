@@ -5,6 +5,9 @@ To install, run `brew install ltotools`
 
 Creates and verifies tape manifests to be used in conjunction with AMIA Open Source's [LTOpers](https://github.com/amiaopensource/ltopers) scripts.
 
+Usage
+`ltomanifest [option] [inputfile]`
+
 Options
 [-m] = Make manifest.
 [-c] = Confirm manifest.
